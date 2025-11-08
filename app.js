@@ -16,7 +16,7 @@ const users = {
     'ritika': { password: 'user123', role: 'user', name: 'Ritika Asudani' },
     'sanjana': { password: 'user123', role: 'user', name: 'Sanjana Patel' },
     'soniya': { password: 'user123', role: 'user', name: 'Soniya Raghuwanshi' },
-    'ashish': { password: 'user123', role: 'user', name: 'Ashish Rathore' },
+    'zeenat': { password: 'user123', role: 'user', name: 'Zeenat Bano' },
 };
 
 document.addEventListener('DOMContentLoaded', () => {

@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Huemot Incentive Calculator</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login-container">
+        <div class="login-box">
+            <div class="logo">
+                <h1>💼 Huemot</h1>
+                <p>Incentive Management System</p>
+            </div>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" required placeholder="Enter your username">
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" required placeholder="Enter your password">
+                </div>
+                <div class="form-group">
+                    <label for="role">Role</label>
+                    <select id="role" required>
+                        <option value="">Select your role</option>
+                        <option value="admin">Admin</option>
+                        <option value="user">User</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">Login</button>
+            </form>
+            <div class="demo-credentials">
+                <p><strong>Login Credentials:</strong></p>
+                <p>Admin: admin / admin123 / Admin</p>
+                <p>Users (user123): chitransh, dipika, niharika, priyanshu, ritika, sanjana, soniya, zeenat</p>
+                <p><em>Note: Users can be both recruiter and AM</em></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Application -->
+    <div id="appScreen" class="app-container" style="display: none;">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-left">
+                <h1>💼 Huemot Incentive Calculator</h1>
+            </div>
+            <div class="header-right">
+                <span class="user-info" id="userInfo"></span>
+                <button id="logoutBtn" class="btn btn-secondary">Logout</button>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="nav-tabs">
+            <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+            <button class="tab-btn" data-tab="records">Records</button>
+            <button class="tab-btn" data-tab="monthly">Monthly Summary</button>
+            <button class="tab-btn" data-tab="settings" id="settingsTab" style="display: none;">Settings</button>
+        </nav>
+
+        <!-- Dashboard Tab -->
+        <div id="dashboard" class="tab-content active">
+            <div class="dashboard-header">
+                <h2>Dashboard Overview</h2>
+                <div class="month-selector">
+                    <label>Select Month:</label>
+                    <input type="month" id="dashboardMonth" value="">
+                </div>
+            </div>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon">💰</div>
+                    <div class="stat-info">
+                        <p class="stat-label">Total Incentives</p>
+                        <p class="stat-value" id="totalIncentives">₹0</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">👥</div>
+                    <div class="stat-info">
+                        <p class="stat-label">Recruiter Incentives</p>
+                        <p class="stat-value" id="recruiterIncentives">₹0</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">📊</div>
+                    <div class="stat-info">
+                        <p class="stat-label">AM Incentives</p>
+                        <p class="stat-value" id="amIncentives">₹0</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon">📈</div>
+                    <div class="stat-info">
+                        <p class="stat-label">Total Net Profit</p>
+                        <p class="stat-value" id="totalProfit">₹0</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="top-performers">
+                <h3>Top Performers This Month</h3>
+                <div id="topPerformers" class="performers-list"></div>
+            </div>
+        </div>
+
+        <!-- Records Tab -->
+        <div id="records" class="tab-content">
+            <div class="records-header">
+                <h2>Incentive Records</h2>
+                <button id="addRecordBtn" class="btn btn-primary" style="display: none;">
+                    <span>➕</span> Add New Record
+                </button>
+            </div>
+
+            <div class="filters">
+                <input type="text" id="searchInput" placeholder="Search by client, recruiter, or AM...">
+                <select id="monthFilter">
+                    <option value="">All Months</option>
+                </select>
+                <select id="recruiterFilter" class="admin-only" style="display: none;">
+                    <option value="">All Recruiters</option>
+                </select>
+                <select id="amFilter" class="admin-only" style="display: none;">
+                    <option value="">All Account Managers</option>
+                </select>
+            </div>
+
+            <div class="table-container">
+                <table id="recordsTable">
+                    <thead>
+                        <tr>
+                            <th>Invoice Date</th>
+                            <th>Client</th>
+                            <th>Recruiter</th>
+                            <th>Account Manager</th>
+                            <th>Payment Term</th>
+                            <th>Invoice Value</th>
+                            <th>Consultant Salary</th>
+                            <th>Net Profit</th>
+                            <th>Recruiter Incentive</th>
+                            <th>AM Incentive</th>
+                            <th>Remarks</th>
+                            <th class="admin-only" style="display: none;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recordsTableBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Monthly Summary Tab -->
+        <div id="monthly" class="tab-content">
+            <h2>Monthly Payout Summary</h2>
+            <div class="table-container">
+                <table id="monthlyTable">
+                    <thead>
+                        <tr>
+                            <th>Payout Month</th>
+                            <th>Total Net Profit</th>
+                            <th>Recruiter Incentives</th>
+                            <th>AM Incentives</th>
+                            <th>Total Incentives</th>
+                        </tr>
+                    </thead>
+                    <tbody id="monthlyTableBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div id="settings" class="tab-content">
+            <h2>Settings</h2>
+            <div class="settings-container">
+                <div class="settings-card">
+                    <h3>Default Incentive Rate</h3>
+                    <div class="form-group">
+                        <label>Rate (%)</label>
+                        <input type="number" id="defaultRate" step="0.01" min="0" max="1">
+                        <button id="saveRateBtn" class="btn btn-primary">Save</button>
+                    </div>
+                </div>
+
+                <div class="settings-card">
+                    <h3>Custom Rates</h3>
+                    <button id="addRateBtn" class="btn btn-primary">Add Custom Rate</button>
+                    <div id="customRatesTable" class="table-container"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Record Modal -->
+    <div id="recordModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modalTitle">Add New Record</h3>
+                <span class="close">&times;</span>
+            </div>
+            <form id="recordForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Invoice Date *</label>
+                        <input type="date" name="invoiceDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Payment Term (days) *</label>
+                        <select name="paymentTerm" required>
+                            <option value="15">15 days</option>
+                            <option value="30">30 days</option>
+                            <option value="45">45 days</option>
+                            <option value="90">90 days</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Client Name *</label>
+                        <input type="text" name="client" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Recruiter *</label>
+                        <input type="text" name="recruiter" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Account Manager *</label>
+                        <input type="text" name="accountManager" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Untaxed Invoice Value (₹) *</label>
+                        <input type="number" name="untaxedInvoicedValue" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Consultant Monthly Salary (₹) *</label>
+                        <input type="number" name="consultantMonthlySalary" step="0.01" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group full-width">
+                        <label>Remarks</label>
+                        <textarea name="remarks" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Record</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add Rate Modal -->
+    <div id="rateModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Add Custom Rate</h3>
+                <span class="close">&times;</span>
+            </div>
+            <form id="rateForm">
+                <div class="form-group">
+                    <label>Role *</label>
+                    <select name="role" required>
+                        <option value="Recruiter">Recruiter</option>
+                        <option value="AM">Account Manager</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Person Name *</label>
+                    <input type="text" name="person" required>
+                </div>
+                <div class="form-group">
+                    <label>Payout Month *</label>
+                    <input type="month" name="payoutMonth" required>
+                </div>
+                <div class="form-group">
+                    <label>Rate (e.g., 0.06 for 6%) *</label>
+                    <input type="number" name="rate" step="0.01" min="0" max="1" required>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="cancelRateBtn">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Rate</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

@@ -3,7 +3,8 @@
 // ==========================================
 
 // IMPORTANT: Replace this with your actual deployment URL
-const API_URL = 'https://script.google.com/macros/s/AKfycbyIfXvZ4lcPpnYUHisemSTbApS208XomJAkKIETmJ5Fo1YF8jZbValppG8a7tNZ6OSX/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbyQLVtu92n61b1sx0ZQiofPMBq0jDgLzjF0IYpjTtlRoQ-yi_heV5LkPSrc95zAlhrD/exec';
+
 
 // Application State - Using var to avoid redeclaration errors
 var appState = {
@@ -163,6 +164,11 @@ async function loadDataFromSheets() {
         appState.incentivesData = data.records || [];
         appState.customRates = data.customRates || [];
         appState.settings = data.settings || { defaultIncentiveRate: 0.06 };
+        
+        console.log('📊 Data loaded from Google Sheets:');
+        console.log('  - Records:', appState.incentivesData.length);
+        console.log('  - Custom Rates:', appState.customRates.length);
+        console.log('  - Default Rate:', appState.settings.defaultIncentiveRate);
         
         updateDashboard();
         loadRecords();
@@ -461,33 +467,82 @@ function switchTab(tabName) {
 }
 
 // ==========================================
-// CALCULATION FUNCTIONS
+// CALCULATION FUNCTIONS - FIXED!
 // ==========================================
 
 function calculatePayoutDate(invoiceDate, paymentTermDays) {
     const parts = invoiceDate.split('-');
-    const invoiceDay = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    const date = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
     
-    const payoutDay = new Date(invoiceDay);
-    payoutDay.setDate(payoutDay.getDate() + parseInt(paymentTermDays));
+    // Set to day 1 to avoid date overflow issues (e.g., Aug 31 + 1 month = Oct 1)
+    date.setDate(1);
     
-    const year = payoutDay.getFullYear();
-    const month = String(payoutDay.getMonth() + 1).padStart(2, '0');
+    const term = parseInt(paymentTermDays);
+    
+    // Add appropriate months based on payment term
+    if (term === 45) {
+        date.setMonth(date.getMonth() + 2);  // 45 days = 2 months ahead
+    } else {
+        date.setMonth(date.getMonth() + 1);  // 15/30 days = 1 month ahead
+    }
+    
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
     
     return `${year}-${month}`;
 }
 
+// 🔧 FIX: Helper function to normalize date formats for comparison
+function normalizePayoutMonth(payoutMonth) {
+    if (!payoutMonth) return '';
+    
+    // If it's already a string in YYYY-MM format, return it
+    if (typeof payoutMonth === 'string' && /^\d{4}-\d{2}$/.test(payoutMonth)) {
+        return payoutMonth;
+    }
+    
+    // If it's a Date object or ISO string, convert it
+    const date = new Date(payoutMonth);
+    if (isNaN(date.getTime())) {
+        // Invalid date, return as-is
+        return String(payoutMonth);
+    }
+    
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}`;
+}
+
+// 🔧 FIX: Updated getIncentiveRate to use date normalization
 function getIncentiveRate(role, person, payoutMonth) {
-    const customRate = appState.customRates.find(r => 
-        r.role === role && 
-        r.person === person && 
-        r.payoutMonth === payoutMonth
-    );
+    console.log(`🔍 Looking for custom rate: role="${role}", person="${person}", month="${payoutMonth}"`);
+    
+    // Normalize the payout month we're searching for
+    const normalizedPayoutMonth = normalizePayoutMonth(payoutMonth);
+    console.log(`   Normalized search month: ${normalizedPayoutMonth}`);
+    
+    const customRate = appState.customRates.find(r => {
+        // Normalize the rate's payout month too
+        const normalizedRateMonth = normalizePayoutMonth(r.payoutMonth);
+        
+        const roleMatch = r.role === role;
+        const personMatch = r.person === person;
+        const monthMatch = normalizedRateMonth === normalizedPayoutMonth;
+        
+        console.log(`   Checking rate:`, r);
+        console.log(`   - Role match: ${roleMatch} (${r.role} === ${role})`);
+        console.log(`   - Person match: ${personMatch} (${r.person} === ${person})`);
+        console.log(`   - Month match: ${monthMatch} (${normalizedRateMonth} === ${normalizedPayoutMonth})`);
+        
+        return roleMatch && personMatch && monthMatch;
+    });
     
     if (customRate) {
+        console.log(`✅ Found custom rate: ${(parseFloat(customRate.rate) * 100).toFixed(2)}%`);
         return parseFloat(customRate.rate);
     }
     
+    console.log(`❌ No custom rate found, using default: ${(appState.settings.defaultIncentiveRate * 100).toFixed(2)}%`);
     return parseFloat(appState.settings.defaultIncentiveRate);
 }
 
@@ -496,11 +551,19 @@ function calculateIncentives(record, payoutMonth) {
     const salary = parseFloat(record.consultantMonthlySalary) || 0;
     const netProfit = invoiceValue - salary;
     
+    console.log(`\n💰 Calculating incentives for: ${record.client}`);
+    console.log(`   Invoice: ${record.invoiceDate}, Term: ${record.paymentTerm} days`);
+    console.log(`   Payout Month: ${payoutMonth}`);
+    console.log(`   Net Profit: ₹${netProfit.toLocaleString()}`);
+    
     const recruiterRate = getIncentiveRate('Recruiter', record.recruiter, payoutMonth);
     const amRate = getIncentiveRate('AM', record.accountManager, payoutMonth);
     
     const recruiterIncentive = netProfit * recruiterRate;
     const amIncentive = netProfit * amRate;
+    
+    console.log(`   Final rates: Recruiter=${(recruiterRate * 100).toFixed(2)}%, AM=${(amRate * 100).toFixed(2)}%`);
+    console.log(`   Incentives: Recruiter=₹${recruiterIncentive.toFixed(2)}, AM=₹${amIncentive.toFixed(2)}\n`);
     
     return {
         netProfit,
@@ -850,7 +913,7 @@ function loadSettings() {
                     <tr>
                         <td>${rate.role}</td>
                         <td>${rate.person}</td>
-                        <td>${formatMonth(rate.payoutMonth)}</td>
+                        <td>${formatMonth(normalizePayoutMonth(rate.payoutMonth))}</td>
                         <td>${(rate.rate * 100).toFixed(2)}%</td>
                         <td>
                             <button class="btn btn-danger" onclick="deleteRate(${index})">Delete</button>
@@ -911,3 +974,57 @@ function formatMonth(monthString) {
     const date = new Date(year, parseInt(month) - 1);
     return date.toLocaleDateString('en-IN', { year: 'numeric', month: 'long' });
 }
+
+// ==========================================
+// DEBUG FUNCTIONS (Call from browser console)
+// ==========================================
+
+// Debug custom rates matching
+window.debugCustomRates = function() {
+    console.log('=== DEBUG: Custom Rates ===');
+    console.log('Custom Rates:', appState.customRates);
+    console.log('Default Rate:', appState.settings.defaultIncentiveRate);
+    
+    console.log('\n=== Testing First 3 Records ===');
+    appState.incentivesData.slice(0, 3).forEach(record => {
+        const payoutMonth = calculatePayoutDate(record.invoiceDate, record.paymentTerm);
+        console.log(`\n${record.client}:`);
+        console.log(`  Invoice: ${record.invoiceDate}, Term: ${record.paymentTerm} days`);
+        console.log(`  Payout Month: ${payoutMonth}`);
+        console.log(`  Recruiter: ${record.recruiter}`);
+        console.log(`  AM: ${record.accountManager}`);
+        
+        const calc = calculateIncentives(record, payoutMonth);
+        console.log(`  Recruiter Rate: ${(calc.recruiterRate * 100).toFixed(2)}%`);
+        console.log(`  AM Rate: ${(calc.amRate * 100).toFixed(2)}%`);
+    });
+};
+
+// Show payout months for all records
+window.debugPayoutMonths = function() {
+    console.log('=== DEBUG: Payout Months ===');
+    const monthCounts = {};
+    
+    appState.incentivesData.forEach(record => {
+        const payoutMonth = calculatePayoutDate(record.invoiceDate, record.paymentTerm);
+        if (!monthCounts[payoutMonth]) {
+            monthCounts[payoutMonth] = [];
+        }
+        monthCounts[payoutMonth].push({
+            client: record.client,
+            invoice: record.invoiceDate,
+            term: record.paymentTerm
+        });
+    });
+    
+    Object.keys(monthCounts).sort().forEach(month => {
+        console.log(`\n${month}: ${monthCounts[month].length} records`);
+        monthCounts[month].forEach(r => {
+            console.log(`  - ${r.client} (${r.invoice} + ${r.term}d)`);
+        });
+    });
+};
+
+console.log('💡 Debug functions available:');
+console.log('  - debugCustomRates() : Check custom rate matching');
+console.log('  - debugPayoutMonths() : See payout month distribution');

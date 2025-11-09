@@ -1,7 +1,7 @@
 // ==========================================
 // CONFIGURATION
 // ==========================================
-const API_URL = 'https://script.google.com/macros/s/AKfycbym7p3d8KDor4eNUqt2vCE9Gr86I9DUYg47fnBfiuwFVqIen5VSexYssR5VX6ZfT5Hf/exec'; // Replace after deploying Apps Script
+const API_URL = 'https://script.google.com/macros/s/AKfycbyIfXvZ4lcPpnYUHisemSTbApS208XomJAkKIETmJ5Fo1YF8jZbValppG8a7tNZ6OSX/exec'; // Replace after deploying Apps Script
 
 // Application State
 let appState = {

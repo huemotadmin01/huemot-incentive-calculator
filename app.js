@@ -1,7 +1,7 @@
 // ==========================================
-// CONFIGURATION - UPDATE THIS WITH YOUR APPS SCRIPT URL
+// CONFIGURATION
 // ==========================================
-const API_URL = 'https://script.google.com/macros/s/AKfycbym7p3d8KDor4eNUqt2vCE9Gr86I9DUYg47fnBfiuwFVqIen5VSexYssR5VX6ZfT5Hf/exec'; // Replace after deploying Apps Script
+const API_URL = 'YOUR_APPS_SCRIPT_WEB_APP_URL_HERE'; // Replace after deploying Apps Script
 
 // Application State
 let appState = {
@@ -11,17 +11,123 @@ let appState = {
     settings: {
         defaultIncentiveRate: 0.06
     },
+    users: [], // NEW: Users loaded from Google Sheets
     editingRecordIndex: null,
     isLoading: false
 };
 
 // ==========================================
-// API FUNCTIONS - Connect to Google Sheets
+// SESSION MANAGEMENT (NEW)
 // ==========================================
 
 /**
- * Load all data from Google Sheets
+ * Save login session to browser storage
  */
+function saveSession(user) {
+    try {
+        sessionStorage.setItem('huemot_user', JSON.stringify(user));
+    } catch (error) {
+        console.error('Error saving session:', error);
+    }
+}
+
+/**
+ * Load login session from browser storage
+ */
+function loadSession() {
+    try {
+        const userJson = sessionStorage.getItem('huemot_user');
+        if (userJson) {
+            return JSON.parse(userJson);
+        }
+    } catch (error) {
+        console.error('Error loading session:', error);
+    }
+    return null;
+}
+
+/**
+ * Clear login session
+ */
+function clearSession() {
+    try {
+        sessionStorage.removeItem('huemot_user');
+    } catch (error) {
+        console.error('Error clearing session:', error);
+    }
+}
+
+/**
+ * Check if user is logged in (on page load)
+ */
+function checkExistingSession() {
+    const savedUser = loadSession();
+    if (savedUser) {
+        appState.currentUser = savedUser;
+        showApp();
+        return true;
+    }
+    return false;
+}
+
+// ==========================================
+// API FUNCTIONS - USER AUTHENTICATION
+// ==========================================
+
+/**
+ * Authenticate user via API
+ */
+async function authenticateUser(username, password, role) {
+    showLoading();
+    try {
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                action: 'login',
+                username: username,
+                password: password,
+                role: role
+            })
+        });
+        
+        const result = await response.json();
+        
+        hideLoading();
+        
+        if (result.success) {
+            return { success: true, user: result.user };
+        } else {
+            return { success: false, error: result.error || 'Login failed' };
+        }
+    } catch (error) {
+        hideLoading();
+        console.error('Error authenticating user:', error);
+        return { success: false, error: 'Network error. Please check your connection.' };
+    }
+}
+
+/**
+ * Load all users from Google Sheets (admin only)
+ */
+async function loadUsersFromSheets() {
+    try {
+        const response = await fetch(`${API_URL}?action=getUsers`);
+        const users = await response.json();
+        appState.users = users || [];
+        return users;
+    } catch (error) {
+        console.error('Error loading users:', error);
+        return [];
+    }
+}
+
+// ==========================================
+// EXISTING API FUNCTIONS (keep all previous)
+// ==========================================
+
 async function loadDataFromSheets() {
     if (appState.isLoading) return;
     
@@ -41,12 +147,10 @@ async function loadDataFromSheets() {
             throw new Error(data.error);
         }
         
-        // Update app state with fetched data
         appState.incentivesData = data.records || [];
         appState.customRates = data.customRates || [];
         appState.settings = data.settings || { defaultIncentiveRate: 0.06 };
         
-        // Refresh all views
         updateDashboard();
         loadRecords();
         loadMonthlySummary();
@@ -63,9 +167,6 @@ async function loadDataFromSheets() {
     }
 }
 
-/**
- * Add new record to Google Sheets
- */
 async function addRecordToSheets(record) {
     showLoading();
     try {
@@ -86,10 +187,7 @@ async function addRecordToSheets(record) {
             throw new Error(result.error || 'Failed to add record');
         }
         
-        // Add ID to record
         record.id = result.id;
-        
-        // Reload data to stay in sync
         await loadDataFromSheets();
         
         hideLoading();
@@ -102,9 +200,6 @@ async function addRecordToSheets(record) {
     }
 }
 
-/**
- * Update existing record in Google Sheets
- */
 async function updateRecordInSheets(id, record) {
     showLoading();
     try {
@@ -126,7 +221,6 @@ async function updateRecordInSheets(id, record) {
             throw new Error(result.error || 'Failed to update record');
         }
         
-        // Reload data to stay in sync
         await loadDataFromSheets();
         
         hideLoading();
@@ -139,9 +233,6 @@ async function updateRecordInSheets(id, record) {
     }
 }
 
-/**
- * Delete record from Google Sheets
- */
 async function deleteRecordFromSheets(id) {
     showLoading();
     try {
@@ -162,7 +253,6 @@ async function deleteRecordFromSheets(id) {
             throw new Error(result.error || 'Failed to delete record');
         }
         
-        // Reload data to stay in sync
         await loadDataFromSheets();
         
         hideLoading();
@@ -175,9 +265,6 @@ async function deleteRecordFromSheets(id) {
     }
 }
 
-/**
- * Add custom rate to Google Sheets
- */
 async function addCustomRateToSheets(rate) {
     showLoading();
     try {
@@ -211,9 +298,6 @@ async function addCustomRateToSheets(rate) {
     }
 }
 
-/**
- * Delete custom rate from Google Sheets
- */
 async function deleteCustomRateFromSheets(id) {
     showLoading();
     try {
@@ -246,9 +330,6 @@ async function deleteCustomRateFromSheets(id) {
     }
 }
 
-/**
- * Update settings in Google Sheets
- */
 async function updateSettingsInSheets(settings) {
     showLoading();
     try {
@@ -286,7 +367,6 @@ async function updateSettingsInSheets(settings) {
 // ==========================================
 
 function showLoading() {
-    // You can add a loading overlay here
     document.body.style.cursor = 'wait';
 }
 
@@ -298,140 +378,132 @@ function hideLoading() {
 // AUTHENTICATION & INITIALIZATION
 // ==========================================
 
-// User credentials (in production, move to secure backend)
-const users = {
-    admin: { password: 'admin123', role: 'admin', name: 'Admin' },
-    chitransh: { password: 'user123', role: 'user', name: 'Chitransh Nawani' },
-    dipika: { password: 'user123', role: 'user', name: 'Dipika Chaudhary' },
-    niharika: { password: 'user123', role: 'user', name: 'Niharika Sao' },
-    priyanshu: { password: 'user123', role: 'user', name: 'Priyanshu Sahu' },
-    ritika: { password: 'user123', role: 'user', name: 'Ritika Asudani' },
-    sanjana: { password: 'user123', role: 'user', name: 'Sanjana Patel' },
-    soniya: { password: 'user123', role: 'user', name: 'Soniya Raghuwanshi' },
-    zeenat: { password: 'user123', role: 'user', name: 'Zeenat Bano' }
-};
-
-// Event Listeners
 document.addEventListener('DOMContentLoaded', () => {
-    // Login form
-    document.getElementById('loginForm').addEventListener('submit', handleLogin);
+    setupEventListeners();
     
-    // Logout
-    document.getElementById('logoutBtn').addEventListener('click', handleLogout);
+    // NEW: Check if user is already logged in
+    if (checkExistingSession()) {
+        console.log('Session restored for:', appState.currentUser.name);
+    } else {
+        console.log('No existing session, showing login screen');
+    }
     
-    // Tab navigation
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => switchTab(btn.dataset.tab));
-    });
-    
-    // Dashboard month selector
-    document.getElementById('dashboardMonth').addEventListener('change', updateDashboard);
-    
-    // Record modal
-    document.getElementById('addRecordBtn').addEventListener('click', openAddRecordModal);
-    document.getElementById('recordForm').addEventListener('submit', handleRecordSubmit);
-    document.getElementById('cancelBtn').addEventListener('click', closeModals);
-    
-    // Rate modal
-    document.getElementById('addRateBtn').addEventListener('click', openAddRateModal);
-    document.getElementById('rateForm').addEventListener('submit', handleRateSubmit);
-    document.getElementById('cancelRateBtn').addEventListener('click', closeModals);
-    
-    // Settings
-    document.getElementById('saveRateBtn').addEventListener('click', saveDefaultRate);
-    
-    // Filters
-    document.getElementById('searchInput').addEventListener('input', loadRecords);
-    document.getElementById('monthFilter').addEventListener('change', loadRecords);
-    document.getElementById('recruiterFilter').addEventListener('change', loadRecords);
-    document.getElementById('amFilter').addEventListener('change', loadRecords);
-    
-    // Modal close buttons
-    document.querySelectorAll('.close').forEach(btn => {
-        btn.addEventListener('click', closeModals);
-    });
-    
-    // Set default dashboard month to current month
     const today = new Date();
     const currentMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
     document.getElementById('dashboardMonth').value = currentMonth;
 });
 
-function handleLogin(e) {
+function setupEventListeners() {
+    document.getElementById('loginForm').addEventListener('submit', handleLogin);
+    document.getElementById('logoutBtn').addEventListener('click', handleLogout);
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    });
+
+    document.getElementById('dashboardMonth').addEventListener('change', updateDashboard);
+
+    document.getElementById('addRecordBtn').addEventListener('click', openAddRecordModal);
+    document.getElementById('recordForm').addEventListener('submit', handleRecordSubmit);
+    document.getElementById('cancelBtn').addEventListener('click', closeModals);
+    
+    document.getElementById('addRateBtn').addEventListener('click', openAddRateModal);
+    document.getElementById('rateForm').addEventListener('submit', handleRateSubmit);
+    document.getElementById('cancelRateBtn').addEventListener('click', closeModals);
+    
+    document.getElementById('saveRateBtn').addEventListener('click', saveDefaultRate);
+    
+    document.getElementById('searchInput').addEventListener('input', loadRecords);
+    document.getElementById('monthFilter').addEventListener('change', loadRecords);
+    document.getElementById('recruiterFilter').addEventListener('change', loadRecords);
+    document.getElementById('amFilter').addEventListener('change', loadRecords);
+    
+    document.querySelectorAll('.close').forEach(btn => {
+        btn.addEventListener('click', closeModals);
+    });
+}
+
+/**
+ * Handle login - NOW uses API authentication
+ */
+async function handleLogin(e) {
     e.preventDefault();
     const username = document.getElementById('username').value.toLowerCase();
     const password = document.getElementById('password').value;
     const role = document.getElementById('role').value;
     
-    const user = users[username];
+    // Authenticate via Google Sheets
+    const result = await authenticateUser(username, password, role);
     
-    if (user && user.password === password && user.role === role) {
-        appState.currentUser = user;
-        document.getElementById('loginScreen').style.display = 'none';
-        document.getElementById('appScreen').style.display = 'flex';
-        document.getElementById('userInfo').textContent = `Logged in as: ${user.name} (${user.role})`;
+    if (result.success) {
+        appState.currentUser = result.user;
         
-        // Show/hide admin elements
-        if (user.role === 'admin') {
-            document.querySelectorAll('.admin-only').forEach(el => el.style.display = '');
-            document.getElementById('settingsTab').style.display = '';
-        }
+        // NEW: Save session to browser storage
+        saveSession(result.user);
         
-        // Load data from Google Sheets
-        loadDataFromSheets();
+        showApp();
     } else {
-        alert('Invalid credentials!');
+        alert(result.error || 'Invalid credentials. Please check username, password, and role.');
     }
 }
 
+/**
+ * Handle logout - NOW clears session
+ */
 function handleLogout() {
+    // NEW: Clear session storage
+    clearSession();
+    
     appState.currentUser = null;
     document.getElementById('loginScreen').style.display = 'flex';
     document.getElementById('appScreen').style.display = 'none';
     document.getElementById('loginForm').reset();
 }
 
-function switchTab(tabName) {
-    // Update tab buttons
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.tab === tabName);
+function showApp() {
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('appScreen').style.display = 'flex';
+    
+    const isAdmin = appState.currentUser.role === 'admin';
+    const roleDisplay = isAdmin ? 'ADMIN' : 'USER';
+    document.getElementById('userInfo').textContent = 
+        `${appState.currentUser.name} (${roleDisplay})`;
+    
+    document.getElementById('settingsTab').style.display = isAdmin ? 'block' : 'none';
+    document.getElementById('addRecordBtn').style.display = isAdmin ? 'inline-flex' : 'none';
+    document.querySelectorAll('.admin-only').forEach(el => {
+        el.style.display = isAdmin ? '' : 'none';
     });
     
-    // Update tab content
-    document.querySelectorAll('.tab-content').forEach(content => {
-        content.classList.toggle('active', content.id === tabName);
-    });
+    loadDataFromSheets();
+}
+
+function switchTab(tabName) {
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+    
+    document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+    document.getElementById(tabName).classList.add('active');
 }
 
 // ==========================================
 // CALCULATION FUNCTIONS
 // ==========================================
 
-/**
- * Calculate payout date based on invoice date and payment term
- * FIXED: Properly handles month boundaries and timezone issues
- */
 function calculatePayoutDate(invoiceDate, paymentTermDays) {
-    // Parse the invoice date as local date (not UTC)
     const parts = invoiceDate.split('-');
     const invoiceDay = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
     
-    // Add payment term days
     const payoutDay = new Date(invoiceDay);
     payoutDay.setDate(payoutDay.getDate() + parseInt(paymentTermDays));
     
-    // Return as YYYY-MM format
     const year = payoutDay.getFullYear();
     const month = String(payoutDay.getMonth() + 1).padStart(2, '0');
     
     return `${year}-${month}`;
 }
 
-/**
- * Get incentive rate for a person in a specific month
- */
 function getIncentiveRate(role, person, payoutMonth) {
-    // Check for custom rate first
     const customRate = appState.customRates.find(r => 
         r.role === role && 
         r.person === person && 
@@ -442,13 +514,9 @@ function getIncentiveRate(role, person, payoutMonth) {
         return parseFloat(customRate.rate);
     }
     
-    // Return default rate
     return parseFloat(appState.settings.defaultIncentiveRate);
 }
 
-/**
- * Calculate all incentive values for a record
- */
 function calculateIncentives(record, payoutMonth) {
     const invoiceValue = parseFloat(record.untaxedInvoicedValue) || 0;
     const salary = parseFloat(record.consultantMonthlySalary) || 0;
@@ -485,14 +553,12 @@ function updateDashboard() {
     const performersMap = new Map();
     
     appState.incentivesData.forEach(record => {
-        // For non-admin, only show their records
         if (!isAdmin && record.recruiter !== userName && record.accountManager !== userName) {
             return;
         }
         
         const payoutMonth = calculatePayoutDate(record.invoiceDate, record.paymentTerm);
         
-        // Filter by selected month if specified
         if (selectedMonth && payoutMonth !== selectedMonth) {
             return;
         }
@@ -503,7 +569,6 @@ function updateDashboard() {
         recruiterIncentives += calc.recruiterIncentive;
         amIncentives += calc.amIncentive;
         
-        // Track performers
         if (!performersMap.has(record.recruiter)) {
             performersMap.set(record.recruiter, 0);
         }
@@ -517,13 +582,11 @@ function updateDashboard() {
     
     totalIncentives = recruiterIncentives + amIncentives;
     
-    // Update stats
     document.getElementById('totalIncentives').textContent = formatCurrency(totalIncentives);
     document.getElementById('recruiterIncentives').textContent = formatCurrency(recruiterIncentives);
     document.getElementById('amIncentives').textContent = formatCurrency(amIncentives);
     document.getElementById('totalProfit').textContent = formatCurrency(totalProfit);
     
-    // Update top performers
     const sorted = Array.from(performersMap.entries())
         .sort((a, b) => b[1] - a[1])
         .slice(0, 5);
@@ -551,12 +614,10 @@ function loadRecords() {
     const userName = appState.currentUser.name;
     
     const filtered = appState.incentivesData.filter(record => {
-        // Access control for non-admin users
         if (!isAdmin && record.recruiter !== userName && record.accountManager !== userName) {
             return false;
         }
         
-        // Search filter
         if (searchTerm && !(
             record.client.toLowerCase().includes(searchTerm) ||
             record.recruiter.toLowerCase().includes(searchTerm) ||
@@ -565,7 +626,6 @@ function loadRecords() {
             return false;
         }
         
-        // Month filter
         if (monthFilter) {
             const payoutMonth = calculatePayoutDate(record.invoiceDate, record.paymentTerm);
             if (payoutMonth !== monthFilter) {
@@ -573,12 +633,10 @@ function loadRecords() {
             }
         }
         
-        // Recruiter filter
         if (recruiterFilter && record.recruiter !== recruiterFilter) {
             return false;
         }
         
-        // AM filter
         if (amFilter && record.accountManager !== amFilter) {
             return false;
         }
@@ -622,13 +680,11 @@ function populateFilters() {
     const isAdmin = appState.currentUser.role === 'admin';
     const userName = appState.currentUser.name;
     
-    // Collect unique months, recruiters, and AMs from visible records
     const months = new Set();
     const recruiters = new Set();
     const ams = new Set();
     
     appState.incentivesData.forEach(record => {
-        // For non-admin, only show data from their records
         if (!isAdmin && record.recruiter !== userName && record.accountManager !== userName) {
             return;
         }
@@ -639,21 +695,18 @@ function populateFilters() {
         ams.add(record.accountManager);
     });
     
-    // Month filter
     const monthFilter = document.getElementById('monthFilter');
     monthFilter.innerHTML = '<option value="">All Months</option>' +
         Array.from(months).sort().reverse().map(m => 
             `<option value="${m}">${formatMonth(m)}</option>`
         ).join('');
     
-    // Recruiter filter - for non-admin, only show recruiters from their records
     const recruiterFilter = document.getElementById('recruiterFilter');
     recruiterFilter.innerHTML = '<option value="">All Recruiters</option>' +
         Array.from(recruiters).sort().map(r => 
             `<option value="${r}">${r}</option>`
         ).join('');
 
-    // AM filter - for non-admin, only show AMs from their records
     const amFilter = document.getElementById('amFilter');
     amFilter.innerHTML = '<option value="">All Account Managers</option>' +
         Array.from(ams).sort().map(a => 
@@ -661,14 +714,12 @@ function populateFilters() {
         ).join('');
 }
 
-// Load monthly summary
 function loadMonthlySummary() {
     const monthlyData = new Map();
     const isAdmin = appState.currentUser.role === 'admin';
     const userName = appState.currentUser.name;
 
     appState.incentivesData.forEach(record => {
-        // For non-admin, only include records where they're involved
         if (!isAdmin && record.recruiter !== userName && record.accountManager !== userName) {
             return;
         }
@@ -738,10 +789,8 @@ async function deleteRecord(index) {
         const record = appState.incentivesData[index];
         
         if (record.id) {
-            // Delete from Google Sheets
             await deleteRecordFromSheets(record.id);
         } else {
-            // Fallback for records without ID (shouldn't happen with new system)
             appState.incentivesData.splice(index, 1);
             loadRecords();
             updateDashboard();
@@ -768,13 +817,11 @@ async function handleRecordSubmit(e) {
     };
     
     if (appState.editingRecordIndex !== null) {
-        // Update existing record
         const existingRecord = appState.incentivesData[appState.editingRecordIndex];
         if (existingRecord.id) {
             await updateRecordInSheets(existingRecord.id, record);
         }
     } else {
-        // Add new record
         await addRecordToSheets(record);
     }
     
@@ -864,7 +911,6 @@ async function deleteRate(index) {
         if (rate.id) {
             await deleteCustomRateFromSheets(rate.id);
         } else {
-            // Fallback
             appState.customRates.splice(index, 1);
             loadSettings();
             updateDashboard();
@@ -882,7 +928,7 @@ function formatCurrency(amount) {
 }
 
 function formatDate(dateString) {
-    const date = new Date(dateString + 'T00:00:00'); // Force local timezone
+    const date = new Date(dateString + 'T00:00:00');
     return date.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 

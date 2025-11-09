@@ -492,18 +492,47 @@ function calculatePayoutDate(invoiceDate, paymentTermDays) {
     return `${year}-${month}`;
 }
 
+// 🔧 FIX: Helper function to normalize date formats for comparison
+function normalizePayoutMonth(payoutMonth) {
+    if (!payoutMonth) return '';
+    
+    // If it's already a string in YYYY-MM format, return it
+    if (typeof payoutMonth === 'string' && /^\d{4}-\d{2}$/.test(payoutMonth)) {
+        return payoutMonth;
+    }
+    
+    // If it's a Date object or ISO string, convert it
+    const date = new Date(payoutMonth);
+    if (isNaN(date.getTime())) {
+        // Invalid date, return as-is
+        return String(payoutMonth);
+    }
+    
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}`;
+}
+
+// 🔧 FIX: Updated getIncentiveRate to use date normalization
 function getIncentiveRate(role, person, payoutMonth) {
     console.log(`🔍 Looking for custom rate: role="${role}", person="${person}", month="${payoutMonth}"`);
     
+    // Normalize the payout month we're searching for
+    const normalizedPayoutMonth = normalizePayoutMonth(payoutMonth);
+    console.log(`   Normalized search month: ${normalizedPayoutMonth}`);
+    
     const customRate = appState.customRates.find(r => {
+        // Normalize the rate's payout month too
+        const normalizedRateMonth = normalizePayoutMonth(r.payoutMonth);
+        
         const roleMatch = r.role === role;
         const personMatch = r.person === person;
-        const monthMatch = r.payoutMonth === payoutMonth;
+        const monthMatch = normalizedRateMonth === normalizedPayoutMonth;
         
         console.log(`   Checking rate:`, r);
         console.log(`   - Role match: ${roleMatch} (${r.role} === ${role})`);
         console.log(`   - Person match: ${personMatch} (${r.person} === ${person})`);
-        console.log(`   - Month match: ${monthMatch} (${r.payoutMonth} === ${payoutMonth})`);
+        console.log(`   - Month match: ${monthMatch} (${normalizedRateMonth} === ${normalizedPayoutMonth})`);
         
         return roleMatch && personMatch && monthMatch;
     });
@@ -884,7 +913,7 @@ function loadSettings() {
                     <tr>
                         <td>${rate.role}</td>
                         <td>${rate.person}</td>
-                        <td>${formatMonth(rate.payoutMonth)}</td>
+                        <td>${formatMonth(normalizePayoutMonth(rate.payoutMonth))}</td>
                         <td>${(rate.rate * 100).toFixed(2)}%</td>
                         <td>
                             <button class="btn btn-danger" onclick="deleteRate(${index})">Delete</button>

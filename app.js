@@ -467,7 +467,7 @@ function switchTab(tabName) {
 }
 
 // ==========================================
-// CALCULATION FUNCTIONS - FIXED!
+// CALCULATION FUNCTIONS - WITH OVERRIDE SUPPORT!
 // ==========================================
 
 function calculatePayoutDate(invoiceDate, paymentTermDays) {
@@ -513,26 +513,30 @@ function normalizePayoutMonth(payoutMonth) {
     return `${year}-${month}`;
 }
 
-// 🔧 FIX: Updated getIncentiveRate to use date normalization
-function getIncentiveRate(role, person, payoutMonth) {
-    console.log(`🔍 Looking for custom rate: role="${role}", person="${person}", month="${payoutMonth}"`);
+// 🔧 UPDATED: getIncentiveRate with override priority logic
+function getIncentiveRate(role, person, payoutMonth, record, isRecruiter) {
+    console.log(`🔍 Getting incentive rate for: role="${role}", person="${person}", month="${payoutMonth}"`);
     
-    // Normalize the payout month we're searching for
+    // PRIORITY 1: Check for absolute amount override (this will be handled in calculateIncentives)
+    // We skip this here as amount overrides are applied directly to the final amount
+    
+    // PRIORITY 2: Check for percentage override in the record
+    const percentOverrideField = isRecruiter ? 'recruiterPercentOverride' : 'amPercentOverride';
+    if (record && record[percentOverrideField] != null && record[percentOverrideField] !== '') {
+        const overrideRate = parseFloat(record[percentOverrideField]);
+        console.log(`✅ Using ${role} percent override: ${(overrideRate * 100).toFixed(2)}%`);
+        return overrideRate;
+    }
+    
+    // PRIORITY 3: Check for custom rate based on person and payout month
     const normalizedPayoutMonth = normalizePayoutMonth(payoutMonth);
-    console.log(`   Normalized search month: ${normalizedPayoutMonth}`);
+    console.log(`   Searching for custom rate with month: ${normalizedPayoutMonth}`);
     
     const customRate = appState.customRates.find(r => {
-        // Normalize the rate's payout month too
         const normalizedRateMonth = normalizePayoutMonth(r.payoutMonth);
-        
         const roleMatch = r.role === role;
         const personMatch = r.person === person;
         const monthMatch = normalizedRateMonth === normalizedPayoutMonth;
-        
-        console.log(`   Checking rate:`, r);
-        console.log(`   - Role match: ${roleMatch} (${r.role} === ${role})`);
-        console.log(`   - Person match: ${personMatch} (${r.person} === ${person})`);
-        console.log(`   - Month match: ${monthMatch} (${normalizedRateMonth} === ${normalizedPayoutMonth})`);
         
         return roleMatch && personMatch && monthMatch;
     });
@@ -542,10 +546,12 @@ function getIncentiveRate(role, person, payoutMonth) {
         return parseFloat(customRate.rate);
     }
     
+    // PRIORITY 4: Use default rate
     console.log(`❌ No custom rate found, using default: ${(appState.settings.defaultIncentiveRate * 100).toFixed(2)}%`);
     return parseFloat(appState.settings.defaultIncentiveRate);
 }
 
+// 🔧 UPDATED: calculateIncentives with full override support
 function calculateIncentives(record, payoutMonth) {
     const invoiceValue = parseFloat(record.untaxedInvoicedValue) || 0;
     const salary = parseFloat(record.consultantMonthlySalary) || 0;
@@ -556,14 +562,39 @@ function calculateIncentives(record, payoutMonth) {
     console.log(`   Payout Month: ${payoutMonth}`);
     console.log(`   Net Profit: ₹${netProfit.toLocaleString()}`);
     
-    const recruiterRate = getIncentiveRate('Recruiter', record.recruiter, payoutMonth);
-    const amRate = getIncentiveRate('AM', record.accountManager, payoutMonth);
+    // Calculate Recruiter Incentive
+    let recruiterIncentive;
+    let recruiterRate;
     
-    const recruiterIncentive = netProfit * recruiterRate;
-    const amIncentive = netProfit * amRate;
+    // Priority 1: Check for absolute amount override
+    if (record.recruiterAmountOverride != null && record.recruiterAmountOverride !== '') {
+        recruiterIncentive = parseFloat(record.recruiterAmountOverride);
+        recruiterRate = netProfit > 0 ? recruiterIncentive / netProfit : 0;
+        console.log(`   ✅ Recruiter Amount Override: ₹${recruiterIncentive.toFixed(2)} (effective rate: ${(recruiterRate * 100).toFixed(2)}%)`);
+    } else {
+        // Get rate (will check percent override, custom rate, or default)
+        recruiterRate = getIncentiveRate('Recruiter', record.recruiter, payoutMonth, record, true);
+        recruiterIncentive = netProfit * recruiterRate;
+        console.log(`   Recruiter calculated with rate: ${(recruiterRate * 100).toFixed(2)}% = ₹${recruiterIncentive.toFixed(2)}`);
+    }
     
-    console.log(`   Final rates: Recruiter=${(recruiterRate * 100).toFixed(2)}%, AM=${(amRate * 100).toFixed(2)}%`);
-    console.log(`   Incentives: Recruiter=₹${recruiterIncentive.toFixed(2)}, AM=₹${amIncentive.toFixed(2)}\n`);
+    // Calculate AM Incentive
+    let amIncentive;
+    let amRate;
+    
+    // Priority 1: Check for absolute amount override
+    if (record.amAmountOverride != null && record.amAmountOverride !== '') {
+        amIncentive = parseFloat(record.amAmountOverride);
+        amRate = netProfit > 0 ? amIncentive / netProfit : 0;
+        console.log(`   ✅ AM Amount Override: ₹${amIncentive.toFixed(2)} (effective rate: ${(amRate * 100).toFixed(2)}%)`);
+    } else {
+        // Get rate (will check percent override, custom rate, or default)
+        amRate = getIncentiveRate('AM', record.accountManager, payoutMonth, record, false);
+        amIncentive = netProfit * amRate;
+        console.log(`   AM calculated with rate: ${(amRate * 100).toFixed(2)}% = ₹${amIncentive.toFixed(2)}`);
+    }
+    
+    console.log(`   Final Incentives: Recruiter=₹${recruiterIncentive.toFixed(2)}, AM=₹${amIncentive.toFixed(2)}\n`);
     
     return {
         netProfit,
@@ -687,6 +718,10 @@ function loadRecords() {
         const calc = calculateIncentives(record, payoutMonth);
         const actualIndex = appState.incentivesData.indexOf(record);
         
+        // Show override indicators
+        const recruiterOverrideIndicator = record.recruiterAmountOverride ? '💰' : (record.recruiterPercentOverride ? '%' : '');
+        const amOverrideIndicator = record.amAmountOverride ? '💰' : (record.amPercentOverride ? '%' : '');
+        
         return `
             <tr>
                 <td>${formatDate(record.invoiceDate)}</td>
@@ -697,11 +732,17 @@ function loadRecords() {
                 <td>${formatCurrency(record.untaxedInvoicedValue)}</td>
                 <td>${formatCurrency(record.consultantMonthlySalary)}</td>
                 <td><strong>${formatCurrency(calc.netProfit)}</strong></td>
-                <td>${formatCurrency(calc.recruiterIncentive)}<br><small>(${(calc.recruiterRate * 100).toFixed(2)}%)</small></td>
-                <td>${formatCurrency(calc.amIncentive)}<br><small>(${(calc.amRate * 100).toFixed(2)}%)</small></td>
+                <td>
+                    ${recruiterOverrideIndicator} ${formatCurrency(calc.recruiterIncentive)}
+                    <br><small>(${(calc.recruiterRate * 100).toFixed(2)}%)</small>
+                </td>
+                <td>
+                    ${amOverrideIndicator} ${formatCurrency(calc.amIncentive)}
+                    <br><small>(${(calc.amRate * 100).toFixed(2)}%)</small>
+                </td>
                 <td>${record.remarks || '-'}</td>
                 ${isAdmin ? `
-                    <td>
+                    <td class="actions-cell">
                         <div class="action-buttons">
                             <button class="btn btn-secondary" onclick="editRecord(${actualIndex})">Edit</button>
                             <button class="btn btn-danger" onclick="deleteRecord(${actualIndex})">Delete</button>
@@ -816,6 +857,10 @@ function editRecord(index) {
     form.paymentTerm.value = record.paymentTerm;
     form.untaxedInvoicedValue.value = record.untaxedInvoicedValue;
     form.consultantMonthlySalary.value = record.consultantMonthlySalary;
+    form.recruiterAmountOverride.value = record.recruiterAmountOverride || '';
+    form.recruiterPercentOverride.value = record.recruiterPercentOverride || '';
+    form.amAmountOverride.value = record.amAmountOverride || '';
+    form.amPercentOverride.value = record.amPercentOverride || '';
     form.remarks.value = record.remarks || '';
     
     document.getElementById('recordModal').classList.add('show');
@@ -850,6 +895,10 @@ async function handleRecordSubmit(e) {
         untaxedInvoicedValue: parseFloat(formData.get('untaxedInvoicedValue')),
         consultantMonthlySalary: parseFloat(formData.get('consultantMonthlySalary')),
         remarks: formData.get('remarks') || '',
+        recruiterAmountOverride: formData.get('recruiterAmountOverride') ? parseFloat(formData.get('recruiterAmountOverride')) : null,
+        recruiterPercentOverride: formData.get('recruiterPercentOverride') ? parseFloat(formData.get('recruiterPercentOverride')) : null,
+        amAmountOverride: formData.get('amAmountOverride') ? parseFloat(formData.get('amAmountOverride')) : null,
+        amPercentOverride: formData.get('amPercentOverride') ? parseFloat(formData.get('amPercentOverride')) : null,
         createdBy: appState.currentUser.name
     };
     

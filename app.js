@@ -3,7 +3,7 @@
 // ==========================================
 
 // IMPORTANT: Replace this with your actual deployment URL
-const API_URL = 'https://script.google.com/macros/s/AKfycbyQLVtu92n61b1sx0ZQiofPMBq0jDgLzjF0IYpjTtlRoQ-yi_heV5LkPSrc95zAlhrD/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbyQPMyUep2PexEuvqAAFLdZVIo9sWsnJmXgwGqQDQiPUbBLU2qWkprcISMa622wzylg/exec';
 
 
 // Application State - Using var to avoid redeclaration errors

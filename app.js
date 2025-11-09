@@ -170,6 +170,21 @@ async function loadDataFromSheets() {
         console.log('  - Custom Rates:', appState.customRates.length);
         console.log('  - Default Rate:', appState.settings.defaultIncentiveRate);
         
+        // Log first record with overrides for debugging
+        const recordWithOverrides = appState.incentivesData.find(r => 
+            r.recruiterAmountOverride || r.recruiterPercentOverride || 
+            r.amAmountOverride || r.amPercentOverride
+        );
+        if (recordWithOverrides) {
+            console.log('  - Sample record with overrides:', {
+                client: recordWithOverrides.client,
+                recruiterAmountOverride: recordWithOverrides.recruiterAmountOverride,
+                recruiterPercentOverride: recordWithOverrides.recruiterPercentOverride,
+                amAmountOverride: recordWithOverrides.amAmountOverride,
+                amPercentOverride: recordWithOverrides.amPercentOverride
+            });
+        }
+        
         updateDashboard();
         loadRecords();
         loadMonthlySummary();
@@ -180,7 +195,7 @@ async function loadDataFromSheets() {
     } catch (error) {
         console.error('Error loading data:', error);
         hideLoading();
-        alert(`Failed to load data: ${error.message}`);
+        alert(`Failed to load data: ${error.message}\n\nPlease check:\n1. API URL is correct\n2. Google Sheets is accessible\n3. Apps Script is deployed\n4. Check browser console for details`);
     } finally {
         appState.isLoading = false;
     }
@@ -361,10 +376,30 @@ async function updateSettingsInSheets(settings) {
 
 function showLoading() {
     document.body.style.cursor = 'wait';
+    
+    // Create or show loading overlay
+    let loadingOverlay = document.getElementById('loadingOverlay');
+    if (!loadingOverlay) {
+        loadingOverlay = document.createElement('div');
+        loadingOverlay.id = 'loadingOverlay';
+        loadingOverlay.innerHTML = `
+            <div class="loading-spinner">
+                <div class="spinner"></div>
+                <p>Loading...</p>
+            </div>
+        `;
+        document.body.appendChild(loadingOverlay);
+    }
+    loadingOverlay.style.display = 'flex';
 }
 
 function hideLoading() {
     document.body.style.cursor = 'default';
+    
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    if (loadingOverlay) {
+        loadingOverlay.style.display = 'none';
+    }
 }
 
 // ==========================================
@@ -848,6 +883,14 @@ function editRecord(index) {
     appState.editingRecordIndex = index;
     const record = appState.incentivesData[index];
     
+    console.log('Editing record:', record);
+    console.log('Override values:', {
+        recruiterAmountOverride: record.recruiterAmountOverride,
+        recruiterPercentOverride: record.recruiterPercentOverride,
+        amAmountOverride: record.amAmountOverride,
+        amPercentOverride: record.amPercentOverride
+    });
+    
     document.getElementById('modalTitle').textContent = 'Edit Record';
     const form = document.getElementById('recordForm');
     form.invoiceDate.value = record.invoiceDate;
@@ -857,11 +900,21 @@ function editRecord(index) {
     form.paymentTerm.value = record.paymentTerm;
     form.untaxedInvoicedValue.value = record.untaxedInvoicedValue;
     form.consultantMonthlySalary.value = record.consultantMonthlySalary;
-    form.recruiterAmountOverride.value = record.recruiterAmountOverride || '';
-    form.recruiterPercentOverride.value = record.recruiterPercentOverride || '';
-    form.amAmountOverride.value = record.amAmountOverride || '';
-    form.amPercentOverride.value = record.amPercentOverride || '';
+    
+    // Handle override fields - check for null, undefined, empty string, 0
+    form.recruiterAmountOverride.value = (record.recruiterAmountOverride !== null && record.recruiterAmountOverride !== undefined && record.recruiterAmountOverride !== '') ? record.recruiterAmountOverride : '';
+    form.recruiterPercentOverride.value = (record.recruiterPercentOverride !== null && record.recruiterPercentOverride !== undefined && record.recruiterPercentOverride !== '') ? record.recruiterPercentOverride : '';
+    form.amAmountOverride.value = (record.amAmountOverride !== null && record.amAmountOverride !== undefined && record.amAmountOverride !== '') ? record.amAmountOverride : '';
+    form.amPercentOverride.value = (record.amPercentOverride !== null && record.amPercentOverride !== undefined && record.amPercentOverride !== '') ? record.amPercentOverride : '';
+    
     form.remarks.value = record.remarks || '';
+    
+    console.log('Form populated with values:', {
+        recruiterAmountOverride: form.recruiterAmountOverride.value,
+        recruiterPercentOverride: form.recruiterPercentOverride.value,
+        amAmountOverride: form.amAmountOverride.value,
+        amPercentOverride: form.amPercentOverride.value
+    });
     
     document.getElementById('recordModal').classList.add('show');
 }
@@ -886,6 +939,15 @@ async function handleRecordSubmit(e) {
     e.preventDefault();
     const formData = new FormData(e.target);
     
+    // Helper function to parse override values
+    function parseOverrideValue(value) {
+        if (value === null || value === undefined || value === '' || value.trim() === '') {
+            return null;
+        }
+        const parsed = parseFloat(value);
+        return isNaN(parsed) ? null : parsed;
+    }
+    
     const record = {
         invoiceDate: formData.get('invoiceDate'),
         client: formData.get('client'),
@@ -895,23 +957,35 @@ async function handleRecordSubmit(e) {
         untaxedInvoicedValue: parseFloat(formData.get('untaxedInvoicedValue')),
         consultantMonthlySalary: parseFloat(formData.get('consultantMonthlySalary')),
         remarks: formData.get('remarks') || '',
-        recruiterAmountOverride: formData.get('recruiterAmountOverride') ? parseFloat(formData.get('recruiterAmountOverride')) : null,
-        recruiterPercentOverride: formData.get('recruiterPercentOverride') ? parseFloat(formData.get('recruiterPercentOverride')) : null,
-        amAmountOverride: formData.get('amAmountOverride') ? parseFloat(formData.get('amAmountOverride')) : null,
-        amPercentOverride: formData.get('amPercentOverride') ? parseFloat(formData.get('amPercentOverride')) : null,
+        recruiterAmountOverride: parseOverrideValue(formData.get('recruiterAmountOverride')),
+        recruiterPercentOverride: parseOverrideValue(formData.get('recruiterPercentOverride')),
+        amAmountOverride: parseOverrideValue(formData.get('amAmountOverride')),
+        amPercentOverride: parseOverrideValue(formData.get('amPercentOverride')),
         createdBy: appState.currentUser.name
     };
     
-    if (appState.editingRecordIndex !== null) {
-        const existingRecord = appState.incentivesData[appState.editingRecordIndex];
-        if (existingRecord.id) {
-            await updateRecordInSheets(existingRecord.id, record);
-        }
-    } else {
-        await addRecordToSheets(record);
-    }
+    console.log('Submitting record with overrides:', {
+        recruiterAmountOverride: record.recruiterAmountOverride,
+        recruiterPercentOverride: record.recruiterPercentOverride,
+        amAmountOverride: record.amAmountOverride,
+        amPercentOverride: record.amPercentOverride
+    });
     
-    closeModals();
+    try {
+        if (appState.editingRecordIndex !== null) {
+            const existingRecord = appState.incentivesData[appState.editingRecordIndex];
+            if (existingRecord.id) {
+                await updateRecordInSheets(existingRecord.id, record);
+            }
+        } else {
+            await addRecordToSheets(record);
+        }
+        
+        closeModals();
+    } catch (error) {
+        console.error('Error submitting record:', error);
+        // Error is already shown in the API functions
+    }
 }
 
 function openAddRateModal() {

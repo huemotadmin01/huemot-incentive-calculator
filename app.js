@@ -1,7 +1,9 @@
 // ==========================================
 // CONFIGURATION
 // ==========================================
-const API_URL = 'https://script.google.com/macros/s/AKfycbyIfXvZ4lcPpnYUHisemSTbApS208XomJAkKIETmJ5Fo1YF8jZbValppG8a7tNZ6OSX/exec'; // Replace after deploying Apps Script
+
+// IMPORTANT: Replace this with your actual deployment URL
+const API_URL = 'https://script.google.com/macros/s/AKfycbyQLVtu92n61b1sx0ZQiofPMBq0jDgLzjF0IYpjTtlRoQ-yi_heV5LkPSrc95zAlhrD/exec';
 
 // Application State
 let appState = {
@@ -11,32 +13,26 @@ let appState = {
     settings: {
         defaultIncentiveRate: 0.06
     },
-    users: [], // NEW: Users loaded from Google Sheets
+    users: [],
     editingRecordIndex: null,
     isLoading: false
 };
 
 // ==========================================
-// SESSION MANAGEMENT (NEW)
+// SESSION MANAGEMENT
 // ==========================================
 
-/**
- * Save login session to browser storage
- */
 function saveSession(user) {
     try {
-        sessionStorage.setItem('huemot_user', JSON.stringify(user));
+        localStorage.setItem('huemot_user', JSON.stringify(user));
     } catch (error) {
         console.error('Error saving session:', error);
     }
 }
 
-/**
- * Load login session from browser storage
- */
 function loadSession() {
     try {
-        const userJson = sessionStorage.getItem('huemot_user');
+        const userJson = localStorage.getItem('huemot_user');
         if (userJson) {
             return JSON.parse(userJson);
         }
@@ -46,20 +42,14 @@ function loadSession() {
     return null;
 }
 
-/**
- * Clear login session
- */
 function clearSession() {
     try {
-        sessionStorage.removeItem('huemot_user');
+        localStorage.removeItem('huemot_user');
     } catch (error) {
         console.error('Error clearing session:', error);
     }
 }
 
-/**
- * Check if user is logged in (on page load)
- */
 function checkExistingSession() {
     const savedUser = loadSession();
     if (savedUser) {
@@ -71,19 +61,54 @@ function checkExistingSession() {
 }
 
 // ==========================================
+// API HELPER FUNCTION WITH BETTER ERROR HANDLING
+// ==========================================
+
+async function makeApiRequest(url, options = {}) {
+    try {
+        console.log('Making request to:', url);
+        console.log('Options:', options);
+        
+        const response = await fetch(url, {
+            ...options,
+            redirect: 'follow', // Important for Google Apps Script
+            mode: 'cors',
+        });
+        
+        console.log('Response status:', response.status);
+        console.log('Response headers:', response.headers);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const text = await response.text();
+        console.log('Response text:', text);
+        
+        try {
+            return JSON.parse(text);
+        } catch (e) {
+            console.error('Failed to parse JSON:', e);
+            console.error('Raw response:', text);
+            throw new Error('Invalid JSON response from server');
+        }
+    } catch (error) {
+        console.error('API Request failed:', error);
+        throw error;
+    }
+}
+
+// ==========================================
 // API FUNCTIONS - USER AUTHENTICATION
 // ==========================================
 
-/**
- * Authenticate user via API
- */
 async function authenticateUser(username, password, role) {
     showLoading();
     try {
-        const response = await fetch(API_URL, {
+        const result = await makeApiRequest(API_URL, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'text/plain;charset=utf-8',
             },
             body: JSON.stringify({
                 action: 'login',
@@ -92,8 +117,6 @@ async function authenticateUser(username, password, role) {
                 role: role
             })
         });
-        
-        const result = await response.json();
         
         hideLoading();
         
@@ -105,17 +128,16 @@ async function authenticateUser(username, password, role) {
     } catch (error) {
         hideLoading();
         console.error('Error authenticating user:', error);
-        return { success: false, error: 'Network error. Please check your connection.' };
+        return { 
+            success: false, 
+            error: 'Network error. Please check:\n1. Your internet connection\n2. The API URL is correct\n3. Apps Script is deployed as "Anyone" can access' 
+        };
     }
 }
 
-/**
- * Load all users from Google Sheets (admin only)
- */
 async function loadUsersFromSheets() {
     try {
-        const response = await fetch(`${API_URL}?action=getUsers`);
-        const users = await response.json();
+        const users = await makeApiRequest(`${API_URL}?action=getUsers`);
         appState.users = users || [];
         return users;
     } catch (error) {
@@ -125,7 +147,7 @@ async function loadUsersFromSheets() {
 }
 
 // ==========================================
-// EXISTING API FUNCTIONS (keep all previous)
+// EXISTING API FUNCTIONS
 // ==========================================
 
 async function loadDataFromSheets() {
@@ -135,13 +157,7 @@ async function loadDataFromSheets() {
     showLoading();
     
     try {
-        const response = await fetch(`${API_URL}?action=getAllData`);
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const data = await response.json();
+        const data = await makeApiRequest(`${API_URL}?action=getAllData`);
         
         if (data.error) {
             throw new Error(data.error);
@@ -161,7 +177,7 @@ async function loadDataFromSheets() {
     } catch (error) {
         console.error('Error loading data:', error);
         hideLoading();
-        alert(`Failed to load data from Google Sheets: ${error.message}\n\nMake sure you've:\n1. Deployed the Apps Script as a web app\n2. Updated the API_URL in app.js\n3. Set access to "Anyone"`);
+        alert(`Failed to load data from Google Sheets.\n\nError: ${error.message}\n\nPlease check:\n1. Apps Script is deployed correctly\n2. Deployment is set to "Anyone" can access\n3. API_URL in app.js is correct\n4. Check browser console for details`);
     } finally {
         appState.isLoading = false;
     }
@@ -170,18 +186,16 @@ async function loadDataFromSheets() {
 async function addRecordToSheets(record) {
     showLoading();
     try {
-        const response = await fetch(API_URL, {
+        const result = await makeApiRequest(API_URL, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'text/plain;charset=utf-8',
             },
             body: JSON.stringify({
                 action: 'addRecord',
                 record: record
             })
         });
-        
-        const result = await response.json();
         
         if (!result.success) {
             throw new Error(result.error || 'Failed to add record');
@@ -203,10 +217,10 @@ async function addRecordToSheets(record) {
 async function updateRecordInSheets(id, record) {
     showLoading();
     try {
-        const response = await fetch(API_URL, {
+        const result = await makeApiRequest(API_URL, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'text/plain;charset=utf-8',
             },
             body: JSON.stringify({
                 action: 'updateRecord',
@@ -214,8 +228,6 @@ async function updateRecordInSheets(id, record) {
                 record: record
             })
         });
-        
-        const result = await response.json();
         
         if (!result.success) {
             throw new Error(result.error || 'Failed to update record');
@@ -236,18 +248,16 @@ async function updateRecordInSheets(id, record) {
 async function deleteRecordFromSheets(id) {
     showLoading();
     try {
-        const response = await fetch(API_URL, {
+        const result = await makeApiRequest(API_URL, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'text/plain;charset=utf-8',
             },
             body: JSON.stringify({
                 action: 'deleteRecord',
                 id: id
             })
         });
-        
-        const result = await response.json();
         
         if (!result.success) {
             throw new Error(result.error || 'Failed to delete record');
@@ -268,18 +278,16 @@ async function deleteRecordFromSheets(id) {
 async function addCustomRateToSheets(rate) {
     showLoading();
     try {
-        const response = await fetch(API_URL, {
+        const result = await makeApiRequest(API_URL, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'text/plain;charset=utf-8',
             },
             body: JSON.stringify({
                 action: 'addCustomRate',
                 rate: rate
             })
         });
-        
-        const result = await response.json();
         
         if (!result.success) {
             throw new Error(result.error || 'Failed to add custom rate');
@@ -301,18 +309,16 @@ async function addCustomRateToSheets(rate) {
 async function deleteCustomRateFromSheets(id) {
     showLoading();
     try {
-        const response = await fetch(API_URL, {
+        const result = await makeApiRequest(API_URL, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'text/plain;charset=utf-8',
             },
             body: JSON.stringify({
                 action: 'deleteCustomRate',
                 id: id
             })
         });
-        
-        const result = await response.json();
         
         if (!result.success) {
             throw new Error(result.error || 'Failed to delete custom rate');
@@ -333,18 +339,16 @@ async function deleteCustomRateFromSheets(id) {
 async function updateSettingsInSheets(settings) {
     showLoading();
     try {
-        const response = await fetch(API_URL, {
+        const result = await makeApiRequest(API_URL, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'text/plain;charset=utf-8',
             },
             body: JSON.stringify({
                 action: 'updateSettings',
                 settings: settings
             })
         });
-        
-        const result = await response.json();
         
         if (!result.success) {
             throw new Error(result.error || 'Failed to update settings');
@@ -381,7 +385,6 @@ function hideLoading() {
 document.addEventListener('DOMContentLoaded', () => {
     setupEventListeners();
     
-    // NEW: Check if user is already logged in
     if (checkExistingSession()) {
         console.log('Session restored for:', appState.currentUser.name);
     } else {
@@ -423,37 +426,25 @@ function setupEventListeners() {
     });
 }
 
-/**
- * Handle login - NOW uses API authentication
- */
 async function handleLogin(e) {
     e.preventDefault();
     const username = document.getElementById('username').value.toLowerCase();
     const password = document.getElementById('password').value;
     const role = document.getElementById('role').value;
     
-    // Authenticate via Google Sheets
     const result = await authenticateUser(username, password, role);
     
     if (result.success) {
         appState.currentUser = result.user;
-        
-        // NEW: Save session to browser storage
         saveSession(result.user);
-        
         showApp();
     } else {
         alert(result.error || 'Invalid credentials. Please check username, password, and role.');
     }
 }
 
-/**
- * Handle logout - NOW clears session
- */
 function handleLogout() {
-    // NEW: Clear session storage
     clearSession();
-    
     appState.currentUser = null;
     document.getElementById('loginScreen').style.display = 'flex';
     document.getElementById('appScreen').style.display = 'none';
@@ -896,44 +887,3 @@ async function saveDefaultRate() {
         const settings = {
             defaultIncentiveRate: newRate
         };
-        
-        await updateSettingsInSheets(settings);
-        alert('Default rate updated successfully!');
-    } else {
-        alert('Please enter a valid rate between 0 and 1');
-    }
-}
-
-async function deleteRate(index) {
-    if (confirm('Are you sure you want to delete this custom rate?')) {
-        const rate = appState.customRates[index];
-        
-        if (rate.id) {
-            await deleteCustomRateFromSheets(rate.id);
-        } else {
-            appState.customRates.splice(index, 1);
-            loadSettings();
-            updateDashboard();
-            loadRecords();
-        }
-    }
-}
-
-// ==========================================
-// UTILITY FUNCTIONS
-// ==========================================
-
-function formatCurrency(amount) {
-    return '₹' + amount.toLocaleString('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
-}
-
-function formatDate(dateString) {
-    const date = new Date(dateString + 'T00:00:00');
-    return date.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
-}
-
-function formatMonth(monthString) {
-    const [year, month] = monthString.split('-');
-    const date = new Date(year, parseInt(month) - 1);
-    return date.toLocaleDateString('en-IN', { year: 'numeric', month: 'long' });
-}

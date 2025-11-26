@@ -755,10 +755,21 @@ tbody tr:last-child td {
     display: flex;
     align-items: flex-end;
     gap: 12px;
+    flex-wrap: wrap;
+}
+
+.settings-card .form-group label {
+    width: 100%;
+    margin-bottom: 0;
 }
 
 .settings-card .form-group input {
     max-width: 200px;
+    flex: 0 0 auto;
+}
+
+.settings-card .form-group button {
+    flex: 0 0 auto;
 }
 
 /* Responsive */

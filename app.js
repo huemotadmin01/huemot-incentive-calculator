@@ -484,7 +484,9 @@ function showApp() {
     document.getElementById('userInfo').textContent = 
         `${appState.currentUser.name} (${roleDisplay})`;
     
+    // Hide admin-only tabs and features
     document.getElementById('settingsTab').style.display = isAdmin ? 'block' : 'none';
+    document.getElementById('monthlyTab').style.display = isAdmin ? 'block' : 'none';
     document.getElementById('addRecordBtn').style.display = isAdmin ? 'inline-flex' : 'none';
     document.querySelectorAll('.admin-only').forEach(el => {
         el.style.display = isAdmin ? '' : 'none';
@@ -641,13 +643,15 @@ function calculateIncentives(record, payoutMonth) {
 }
 
 // ==========================================
-// DASHBOARD
+// DASHBOARD - UPDATED WITH USER-SPECIFIC FILTERING
 // ==========================================
 
 function updateDashboard() {
     const selectedMonth = document.getElementById('dashboardMonth').value;
     const isAdmin = appState.currentUser.role === 'admin';
     const userName = appState.currentUser.name;
+    
+    console.log(`📊 Updating dashboard for user: ${userName} (${isAdmin ? 'ADMIN' : 'USER'})`);
     
     let totalIncentives = 0;
     let recruiterIncentives = 0;
@@ -656,8 +660,14 @@ function updateDashboard() {
     const performersMap = new Map();
     
     appState.incentivesData.forEach(record => {
-        if (!isAdmin && record.recruiter !== userName && record.accountManager !== userName) {
-            return;
+        // For non-admin users, only show data where they are recruiter OR account manager
+        if (!isAdmin) {
+            const isRecruiter = record.recruiter.toLowerCase() === userName.toLowerCase();
+            const isAM = record.accountManager.toLowerCase() === userName.toLowerCase();
+            
+            if (!isRecruiter && !isAM) {
+                return; // Skip this record
+            }
         }
         
         const payoutMonth = calculatePayoutDate(record.invoiceDate, record.paymentTerm);
@@ -669,21 +679,50 @@ function updateDashboard() {
         const calc = calculateIncentives(record, payoutMonth);
         
         totalProfit += calc.netProfit;
-        recruiterIncentives += calc.recruiterIncentive;
-        amIncentives += calc.amIncentive;
         
-        if (!performersMap.has(record.recruiter)) {
-            performersMap.set(record.recruiter, 0);
+        // For non-admin users, only count their own incentives
+        if (!isAdmin) {
+            const isRecruiter = record.recruiter.toLowerCase() === userName.toLowerCase();
+            const isAM = record.accountManager.toLowerCase() === userName.toLowerCase();
+            
+            if (isRecruiter) {
+                recruiterIncentives += calc.recruiterIncentive;
+                if (!performersMap.has(record.recruiter)) {
+                    performersMap.set(record.recruiter, 0);
+                }
+                performersMap.set(record.recruiter, performersMap.get(record.recruiter) + calc.recruiterIncentive);
+            }
+            
+            if (isAM) {
+                amIncentives += calc.amIncentive;
+                if (!performersMap.has(record.accountManager)) {
+                    performersMap.set(record.accountManager, 0);
+                }
+                performersMap.set(record.accountManager, performersMap.get(record.accountManager) + calc.amIncentive);
+            }
+        } else {
+            // For admin, count all incentives
+            recruiterIncentives += calc.recruiterIncentive;
+            amIncentives += calc.amIncentive;
+            
+            if (!performersMap.has(record.recruiter)) {
+                performersMap.set(record.recruiter, 0);
+            }
+            performersMap.set(record.recruiter, performersMap.get(record.recruiter) + calc.recruiterIncentive);
+            
+            if (!performersMap.has(record.accountManager)) {
+                performersMap.set(record.accountManager, 0);
+            }
+            performersMap.set(record.accountManager, performersMap.get(record.accountManager) + calc.amIncentive);
         }
-        performersMap.set(record.recruiter, performersMap.get(record.recruiter) + calc.recruiterIncentive);
-        
-        if (!performersMap.has(record.accountManager)) {
-            performersMap.set(record.accountManager, 0);
-        }
-        performersMap.set(record.accountManager, performersMap.get(record.accountManager) + calc.amIncentive);
     });
     
     totalIncentives = recruiterIncentives + amIncentives;
+    
+    console.log(`   Total Profit: ₹${totalProfit.toFixed(2)}`);
+    console.log(`   Recruiter Incentives: ₹${recruiterIncentives.toFixed(2)}`);
+    console.log(`   AM Incentives: ₹${amIncentives.toFixed(2)}`);
+    console.log(`   Total Incentives: ₹${totalIncentives.toFixed(2)}`);
     
     document.getElementById('totalIncentives').textContent = formatCurrency(totalIncentives);
     document.getElementById('recruiterIncentives').textContent = formatCurrency(recruiterIncentives);

@@ -821,6 +821,10 @@ function loadRecords() {
         const recruiterOverrideIndicator = record.recruiterAmountOverride ? '💰' : (record.recruiterPercentOverride ? '%' : '');
         const amOverrideIndicator = record.amAmountOverride ? '💰' : (record.amPercentOverride ? '%' : '');
         
+        // Payment Status with color coding
+        const paymentStatus = record.paymentStatus || 'Not Paid';
+        const paymentStatusClass = paymentStatus === 'Paid' ? 'status-paid' : 'status-not-paid';
+        
         return `
             <tr>
                 <td>${formatDate(record.invoiceDate)}</td>
@@ -839,6 +843,7 @@ function loadRecords() {
                     ${amOverrideIndicator} ${formatCurrency(calc.amIncentive)}
                     <br><small>(${(calc.amRate * 100).toFixed(2)}%)</small>
                 </td>
+                <td><span class="${paymentStatusClass}">${paymentStatus}</span></td>
                 <td>${record.remarks || '-'}</td>
                 ${isAdmin ? `
                     <td class="actions-cell">
@@ -952,7 +957,8 @@ function editRecord(index) {
         recruiterAmountOverride: record.recruiterAmountOverride,
         recruiterPercentOverride: record.recruiterPercentOverride,
         amAmountOverride: record.amAmountOverride,
-        amPercentOverride: record.amPercentOverride
+        amPercentOverride: record.amPercentOverride,
+        paymentStatus: record.paymentStatus
     });
     
     document.getElementById('modalTitle').textContent = 'Edit Record';
@@ -971,13 +977,17 @@ function editRecord(index) {
     form.amAmountOverride.value = (record.amAmountOverride !== null && record.amAmountOverride !== undefined && record.amAmountOverride !== '') ? record.amAmountOverride : '';
     form.amPercentOverride.value = (record.amPercentOverride !== null && record.amPercentOverride !== undefined && record.amPercentOverride !== '') ? record.amPercentOverride : '';
     
+    // Set payment status
+    form.paymentStatus.value = record.paymentStatus || 'Not Paid';
+    
     form.remarks.value = record.remarks || '';
     
     console.log('Form populated with values:', {
         recruiterAmountOverride: form.recruiterAmountOverride.value,
         recruiterPercentOverride: form.recruiterPercentOverride.value,
         amAmountOverride: form.amAmountOverride.value,
-        amPercentOverride: form.amPercentOverride.value
+        amPercentOverride: form.amPercentOverride.value,
+        paymentStatus: form.paymentStatus.value
     });
     
     document.getElementById('recordModal').classList.add('show');
@@ -1020,6 +1030,7 @@ async function handleRecordSubmit(e) {
         paymentTerm: parseInt(formData.get('paymentTerm')),
         untaxedInvoicedValue: parseFloat(formData.get('untaxedInvoicedValue')),
         consultantMonthlySalary: parseFloat(formData.get('consultantMonthlySalary')),
+        paymentStatus: formData.get('paymentStatus') || 'Not Paid',
         remarks: formData.get('remarks') || '',
         recruiterAmountOverride: parseOverrideValue(formData.get('recruiterAmountOverride')),
         recruiterPercentOverride: parseOverrideValue(formData.get('recruiterPercentOverride')),
@@ -1032,7 +1043,8 @@ async function handleRecordSubmit(e) {
         recruiterAmountOverride: record.recruiterAmountOverride,
         recruiterPercentOverride: record.recruiterPercentOverride,
         amAmountOverride: record.amAmountOverride,
-        amPercentOverride: record.amPercentOverride
+        amPercentOverride: record.amPercentOverride,
+        paymentStatus: record.paymentStatus
     });
     
     try {

@@ -863,6 +863,17 @@ tbody tr:last-child td {
     margin-bottom: 32px;
 }
 
+/* Payment Status Styling */
+.status-paid {
+    color: var(--success-color);
+    font-weight: 600;
+}
+
+.status-not-paid {
+    color: var(--danger-color);
+    font-weight: 600;
+}
+
 /* Custom Rates Table */
 #customRatesTable table {
     margin-top: 20px;

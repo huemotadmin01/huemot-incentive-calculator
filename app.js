@@ -729,7 +729,32 @@ function updateDashboard() {
     document.getElementById('amIncentives').textContent = formatCurrency(amIncentives);
     document.getElementById('totalProfit').textContent = formatCurrency(totalProfit);
     
-    const sorted = Array.from(performersMap.entries())
+    // Top Performers: Show ALL users' data (even for non-admin)
+    const allPerformersMap = new Map();
+    
+    appState.incentivesData.forEach(record => {
+        const payoutMonth = calculatePayoutDate(record.invoiceDate, record.paymentTerm);
+        
+        if (selectedMonth && payoutMonth !== selectedMonth) {
+            return;
+        }
+        
+        const calc = calculateIncentives(record, payoutMonth);
+        
+        // Track recruiter
+        if (!allPerformersMap.has(record.recruiter)) {
+            allPerformersMap.set(record.recruiter, 0);
+        }
+        allPerformersMap.set(record.recruiter, allPerformersMap.get(record.recruiter) + calc.recruiterIncentive);
+        
+        // Track AM
+        if (!allPerformersMap.has(record.accountManager)) {
+            allPerformersMap.set(record.accountManager, 0);
+        }
+        allPerformersMap.set(record.accountManager, allPerformersMap.get(record.accountManager) + calc.amIncentive);
+    });
+    
+    const sorted = Array.from(allPerformersMap.entries())
         .sort((a, b) => b[1] - a[1])
         .slice(0, 5);
     
